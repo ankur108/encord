@@ -34,7 +34,7 @@ def main():
     sys.path.insert(0, str(ROOT))
 
     # Comment out any step you don't need to run.
-    run_step("01_create_cloud_synced_folders.py")   # create the GCS-synced storage folder
+    run_step("01_create_cloud_synced_folder.py")   # create the GCS-synced storage folder
     run_step("02_attach_metadata.py")               # attach weather/scene/timeofday metadata
     run_step("03_export_ontology_objects.py")        # export ontology objects from the JSON labels
     run_step("04_create_ontology.py")                # create the ontology in Encord

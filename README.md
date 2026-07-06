@@ -27,8 +27,6 @@ gs://enc-techint-datasets/ds-challenge-bddfde26/
    - Dataset: `<ADD DATASET URL>`
    - Ontology: `<ADD ONTOLOGY URL>`
 
-> Replace the placeholders above with the real URLs after a run.
-
 ## Approach
 
 The migration is broken into small, independently runnable stages. Each maps to
