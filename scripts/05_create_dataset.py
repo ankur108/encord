@@ -36,16 +36,22 @@ def create_dataset_from_storage_folder(
     """
     folder = get_storage_folder(folder_name)
 
-    logger.info("Collecting image items from storage folder '%s'.", folder_name)
-    item_uuids = [
-        item.uuid
-        for item in folder.list_items(item_types=[StorageItemType.IMAGE])
-    ]
-    logger.info("Found %d image item(s) to link.", len(item_uuids))
+    logger.info("Collecting image items with metadata from storage folder '%s'.", folder_name)
+    item_uuids = []
+    skipped = 0
+    for item in folder.list_items(item_types=[StorageItemType.IMAGE]):
+        # client_metadata is None when never set, {} when set but empty.
+        if not item.client_metadata:
+            logger.debug("Skipping '%s': no metadata attached.", item.name)
+            skipped += 1
+            continue
+        item_uuids.append(item.uuid)
+
+    logger.info("Found %d image(s) with metadata (%d skipped).", len(item_uuids), skipped)
 
     if not item_uuids:
         raise ValueError(
-            f"No image items found in storage folder '{folder_name}'."
+            f"No image items with metadata found in storage folder '{folder_name}'."
         )
 
     logger.info("Creating dataset '%s'.", dataset_name)

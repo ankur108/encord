@@ -17,6 +17,12 @@ DATASET_DESCRIPTION: str = (
     "BDD100K images linked from the cloud-synced storage folder"
 )
 
+# --- Project ---
+PROJECT_NAME: str = "Techint Project"
+PROJECT_DESCRIPTION: str = (
+    "BDD100K annotation project using the Techint dataset and ontology"
+)
+
 # --- Ontology Export ---
 ONTOLOGY_EXPORT_SOURCE: str = "gcs"  # "local" or "gcs"
 ONTOLOGY_EXPORT_PATH: str = "gs://enc-techint-datasets/ds-challenge-bddfde26/100k/test/" # ./sample or gs path
