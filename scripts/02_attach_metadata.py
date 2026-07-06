@@ -13,8 +13,14 @@ from encord.http.bundle import Bundle
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Attributes to copy from each BDD JSON label onto the Encord image metadata.
-_METADATA_ATTRIBUTES = ("weather", "scene", "timeofday")
+# Maps each BDD JSON attribute (source key) to the Encord metadata field name
+# required by the customer's schema (target key). The schema is prescribed —
+# do not rename the target fields.
+_METADATA_FIELD_MAP = {
+    "weather": "weather",
+    "scene": "scene",
+    "timeofday": "timeofday",
+}
 
 def get_all_json_names_from_gcs(remote_url: str = GCS_REMOTE_URL) -> dict:
     """Lists the JSON files at a GCS remote URL and returns a dict of their names.
@@ -69,8 +75,8 @@ def attach_metadata_to_storage_folder(
     remote_url: str = GCS_REMOTE_URL,
 ) -> None:
     """For each image that has a matching JSON label, attach the label's
-    ``weather``, ``scene`` and ``timeofday`` attributes to the image's metadata
-    in Encord.
+    ``weather``, ``scene`` and ``timeofday`` attributes to the image's
+    metadata in Encord (using the customer's prescribed field names).
     """
     json_files = get_all_json_names_from_gcs(remote_url)
     images = get_image_metadata_from_encord(folder_name)
@@ -93,9 +99,9 @@ def attach_metadata_to_storage_folder(
             label = json.loads(bucket.blob(blob_name).download_as_text())
             attributes = label.get("attributes", {})
             new_values = {
-                key: attributes[key]
-                for key in _METADATA_ATTRIBUTES
-                if key in attributes
+                target: attributes[source]
+                for source, target in _METADATA_FIELD_MAP.items()
+                if source in attributes
             }
             if not new_values:
                 logger.warning("JSON '%s' has no target attributes, skipping.", blob_name)
