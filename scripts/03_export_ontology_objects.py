@@ -1,7 +1,7 @@
 import json
 import sys
-import urllib.request
 from pathlib import Path
+from google.cloud import storage
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 from src.config import ONTOLOGY_EXPORT_SOURCE, ONTOLOGY_EXPORT_PATH
@@ -13,6 +13,8 @@ OUTPUT_FILE = REPORTS_DIR / "ontology_objects.json"
 
 
 def collect(data: dict, ontology: dict):
+    '''Collects object categories, shapes, and attributes from the given "
+    data and updates the ontology dictionary.''' 
     for frame in data.get("frames", []):
         for obj in frame.get("objects", []):
             category = obj.get("category", "unknown")
@@ -25,6 +27,7 @@ def collect(data: dict, ontology: dict):
 
 
 def load_local(directory: str) -> dict:
+    '''Loads ontology data from local JSON files in the specified directory.'''
     path = Path(directory)
     if not path.is_dir():
         sys.exit(f"Error: directory not found: {directory}")
@@ -36,35 +39,26 @@ def load_local(directory: str) -> dict:
     return ontology
 
 
-def load_gcs(bucket_url: str) -> dict:
-    if bucket_url.startswith("gs://"):
-        bucket_url = bucket_url.replace("gs://", "https://storage.googleapis.com/", 1)
-    without_scheme = bucket_url.replace("https://storage.googleapis.com/", "")
-    parts = without_scheme.rstrip("/").split("/", 1)
-    bucket = parts[0]
-    prefix = (parts[1] + "/") if len(parts) > 1 else ""
-    list_url = (
-        f"https://storage.googleapis.com/storage/v1/b/{bucket}/o"
-        f"?prefix={prefix}&fields=items(name)"
-    )
-    try:
-        with urllib.request.urlopen(list_url) as resp:
-            items = json.loads(resp.read()).get("items", [])
-    except Exception as exc:
-        sys.exit(f"Error listing GCS bucket: {exc}")
+def load_gcs(gcs_path: str) -> dict:
+    '''Loads ontology data from all .json files under a gs://bucket/prefix path,
+    recursing through every folder and sub-folder.'''
+    
+    if not gcs_path.startswith("gs://"):
+        sys.exit(f"Error: expected a gs:// path, got: {gcs_path}")
+
+    bucket_name = gcs_path[len("gs://"):].split("/", 1)[0]
+    # Public bucket — use an anonymous client (no credentials required).
+    bucket = storage.Client.create_anonymous_client().bucket(bucket_name)
 
     ontology = {}
-    for item in items:
-        name = item["name"]
-        if not name.endswith(".json"):
+    for blob in bucket.list_blobs():
+        if not blob.name.endswith(".json") and not blob.name.contains("test"):
             continue
-        url = f"https://storage.googleapis.com/{bucket}/{name}"
-        print(f"  Downloading {name}")
+        print(f"Downloading {blob.name}")
         try:
-            with urllib.request.urlopen(url) as resp:
-                collect(json.load(resp), ontology)
+            collect(json.loads(blob.download_as_text()), ontology)
         except Exception as exc:
-            print(f"  Warning: skipping {name}: {exc}")
+            print(f"  Warning: skipping {blob.name}: {exc}")
     return ontology
 
 

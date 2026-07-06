@@ -11,9 +11,15 @@ STORAGE_FOLDER_METADATA: dict = {"env": "techint", "provider": "gcp"}
 
 ONTOLOGY_NAME: str = "Techint Ontology"
 
+# --- Dataset ---
+DATASET_NAME: str = "Techint Dataset"
+DATASET_DESCRIPTION: str = (
+    "BDD100K images linked from the cloud-synced storage folder"
+)
+
 # --- Ontology Export ---
-ONTOLOGY_EXPORT_SOURCE: str = "local"  # "local" or "gcs"
-ONTOLOGY_EXPORT_PATH: str = "./sample"
+ONTOLOGY_EXPORT_SOURCE: str = "gcs"  # "local" or "gcs"
+ONTOLOGY_EXPORT_PATH: str = "gs://enc-techint-datasets/ds-challenge-bddfde26/100k/test/" # ./sample or gs path
 
 # --- GCS Integration ---
 # Set ENCORD_GCS_INTEGRATION_TITLE to match the title shown in

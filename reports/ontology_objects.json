@@ -1,0 +1,196 @@
+[
+  {
+    "category": "area/alternative",
+    "shapes": [
+      "poly2d"
+    ],
+    "attributes": []
+  },
+  {
+    "category": "area/drivable",
+    "shapes": [
+      "poly2d"
+    ],
+    "attributes": []
+  },
+  {
+    "category": "bike",
+    "shapes": [
+      "box2d"
+    ],
+    "attributes": [
+      "occluded",
+      "trafficLightColor",
+      "truncated"
+    ]
+  },
+  {
+    "category": "bus",
+    "shapes": [
+      "box2d"
+    ],
+    "attributes": [
+      "occluded",
+      "trafficLightColor",
+      "truncated"
+    ]
+  },
+  {
+    "category": "car",
+    "shapes": [
+      "box2d"
+    ],
+    "attributes": [
+      "occluded",
+      "trafficLightColor",
+      "truncated"
+    ]
+  },
+  {
+    "category": "lane/crosswalk",
+    "shapes": [
+      "poly2d"
+    ],
+    "attributes": [
+      "direction",
+      "style"
+    ]
+  },
+  {
+    "category": "lane/double white",
+    "shapes": [
+      "poly2d"
+    ],
+    "attributes": [
+      "direction",
+      "style"
+    ]
+  },
+  {
+    "category": "lane/double yellow",
+    "shapes": [
+      "poly2d"
+    ],
+    "attributes": [
+      "direction",
+      "style"
+    ]
+  },
+  {
+    "category": "lane/road curb",
+    "shapes": [
+      "poly2d"
+    ],
+    "attributes": [
+      "direction",
+      "style"
+    ]
+  },
+  {
+    "category": "lane/single other",
+    "shapes": [
+      "poly2d"
+    ],
+    "attributes": [
+      "direction",
+      "style"
+    ]
+  },
+  {
+    "category": "lane/single white",
+    "shapes": [
+      "poly2d"
+    ],
+    "attributes": [
+      "direction",
+      "style"
+    ]
+  },
+  {
+    "category": "lane/single yellow",
+    "shapes": [
+      "poly2d"
+    ],
+    "attributes": [
+      "direction",
+      "style"
+    ]
+  },
+  {
+    "category": "motor",
+    "shapes": [
+      "box2d"
+    ],
+    "attributes": [
+      "occluded",
+      "trafficLightColor",
+      "truncated"
+    ]
+  },
+  {
+    "category": "person",
+    "shapes": [
+      "box2d"
+    ],
+    "attributes": [
+      "occluded",
+      "trafficLightColor",
+      "truncated"
+    ]
+  },
+  {
+    "category": "rider",
+    "shapes": [
+      "box2d"
+    ],
+    "attributes": [
+      "occluded",
+      "trafficLightColor",
+      "truncated"
+    ]
+  },
+  {
+    "category": "traffic light",
+    "shapes": [
+      "box2d"
+    ],
+    "attributes": [
+      "occluded",
+      "trafficLightColor",
+      "truncated"
+    ]
+  },
+  {
+    "category": "traffic sign",
+    "shapes": [
+      "box2d"
+    ],
+    "attributes": [
+      "occluded",
+      "trafficLightColor",
+      "truncated"
+    ]
+  },
+  {
+    "category": "train",
+    "shapes": [
+      "box2d"
+    ],
+    "attributes": [
+      "occluded",
+      "trafficLightColor",
+      "truncated"
+    ]
+  },
+  {
+    "category": "truck",
+    "shapes": [
+      "box2d"
+    ],
+    "attributes": [
+      "occluded",
+      "trafficLightColor",
+      "truncated"
+    ]
+  }
+]
