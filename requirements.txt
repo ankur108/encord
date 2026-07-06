@@ -1,2 +1,3 @@
 # Encord Python SDK
 encord
+google-cloud-storage

@@ -9,6 +9,12 @@ STORAGE_FOLDER_NAME: str = "enc-techint-datasets-gc"
 STORAGE_FOLDER_DESCRIPTION: str = "Cloud-synced GCS folder for techint datasets"
 STORAGE_FOLDER_METADATA: dict = {"env": "techint", "provider": "gcp"}
 
+ONTOLOGY_NAME: str = "Techint Ontology"
+
+# --- Ontology Export ---
+ONTOLOGY_EXPORT_SOURCE: str = "local"  # "local" or "gcs"
+ONTOLOGY_EXPORT_PATH: str = "./sample"
+
 # --- GCS Integration ---
 # Set ENCORD_GCS_INTEGRATION_TITLE to match the title shown in
 # Encord UI > Settings > Integrations for your GCS integration.

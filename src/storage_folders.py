@@ -7,7 +7,7 @@ from encord.orm.storage import (
     SyncPrivateDataWithCloudSyncedFolderStatus,
 )
 
-from src.encord_client import user_client
+from src.utils.encord_client import user_client
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
