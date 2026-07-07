@@ -26,8 +26,16 @@ def load_ontology_objects(path: Path) -> list[dict]:
         return json.load(fh)
 
 
-def build_structure(objects: list[dict]) -> OntologyStructure:
-    structure = OntologyStructure()
+def build_structure(
+    objects: list[dict], structure: OntologyStructure | None = None
+) -> OntologyStructure:
+    # Mutate the given structure (e.g. an existing ontology's live structure) so
+    # that objects already present keep their feature_node_hash. Building onto a
+    # fresh structure would generate new hashes, which on save() reads as
+    # "delete the old objects" — rejected when the ontology is attached to a
+    # project.
+    if structure is None:
+        structure = OntologyStructure()
     skipped = []
 
     for entry in objects:
@@ -82,13 +90,9 @@ def main() -> None:
     objects = load_ontology_objects(output_path)
     logger.info("Loaded %d categories from %s", len(objects), OUTPUT_FILE)
 
-    structure = build_structure(objects)
-    logger.info(
-        "Built ontology structure with %d objects", len(structure.objects)
-    )
     description = "Data Driven Ontology based on JSON Objects & Categories"
 
-    # Upsert: overwrite the structure of an existing ontology with the same
+    # Upsert: additively merge objects into an existing ontology with the same
     # title, otherwise create a new one. Encord does not enforce title
     # uniqueness, so guard against multiple matches.
     existing = user_client.get_ontologies(title_eq=ONTOLOGY_NAME)
@@ -101,19 +105,24 @@ def main() -> None:
 
     if existing:
         ontology = existing[0]["ontology"]
-        # `Ontology.structure` is a getter-only property, so overwrite the
-        # live structure's fields in place rather than reassigning it.
-        ontology.structure.objects = structure.objects
-        ontology.structure.classifications = structure.classifications
-        ontology.structure.skeleton_templates = structure.skeleton_templates
+        # Build onto the live structure so pre-existing objects keep their
+        # feature_node_hash. This adds new objects / attributes without
+        # deleting existing ones — safe even when the ontology is attached to
+        # a project (Encord rejects deleting objects that are in use).
+        build_structure(objects, structure=ontology.structure)
         ontology.description = description
         ontology.save()
         logger.info(
-            "Overwrote structure of existing ontology '%s' (hash: %s)",
+            "Updated existing ontology '%s' (hash: %s), now %d objects",
             ONTOLOGY_NAME,
             ontology.ontology_hash,
+            len(ontology.structure.objects),
         )
     else:
+        structure = build_structure(objects)
+        logger.info(
+            "Built ontology structure with %d objects", len(structure.objects)
+        )
         ontology = user_client.create_ontology(
             title=ONTOLOGY_NAME,
             description=description,
