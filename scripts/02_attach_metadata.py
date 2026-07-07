@@ -7,123 +7,123 @@ from src.config import (
     GCS_REMOTE_URL,
     STORAGE_FOLDER_NAME,
 )
-from encord.storage import StorageItemType
 from encord.http.bundle import Bundle
+from pathlib import PurePosixPath
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Maps each BDD JSON attribute (source key) to the Encord metadata field name
-# required by the customer's schema (target key). The schema is prescribed —
-# do not rename the target fields.
+# required by the customer's schema (target key). The customer mandates exactly:
+# weather (str), scene (str), time_of_day (str) — note the underscore.
 _METADATA_FIELD_MAP = {
     "weather": "weather",
     "scene": "scene",
     "timeofday": "timeofday",
 }
+_IMAGE_EXTENSIONS = (".jpg", ".jpeg")
 
-def get_all_json_names_from_gcs(remote_url: str = GCS_REMOTE_URL) -> dict:
-    """Lists the JSON files at a GCS remote URL and returns a dict of their names.
-    """
+
+def create_image_metadata_dict(remote_url: str = GCS_REMOTE_URL) -> dict:
+
     if not remote_url.startswith("gs://"):
         raise ValueError(f"Expected a gs:// URL, got: {remote_url}")
 
+    # 1. Scan GCS once, separating image files from JSON label files.
     bucket_name, _, prefix = remote_url[len("gs://"):].partition("/")
-
-    client = storage.Client()
-    bucket = client.bucket(bucket_name)
-
+    bucket = storage.Client.create_anonymous_client().bucket(bucket_name)
     prefix = f"{prefix.rstrip('/')}/" if prefix else ""
 
-    logger.info("Listing JSON files under '%s'.", remote_url)
     json_files = {}
+    image_names = []
     for blob in bucket.list_blobs(prefix=prefix):
-        if not blob.name.endswith(".json"):
-            continue
         file_name = blob.name.rsplit("/", 1)[-1]
-        file_stem = file_name[: -len(".json")]
-        json_files[file_stem] = blob.name
+        if file_name.endswith(".json"):
+            json_files[file_name[: -len(".json")]] = blob.name
+        elif file_name.lower().endswith(_IMAGE_EXTENSIONS):
+            image_names.append(file_name)
+    logger.info("Found %d image(s) and %d JSON file(s) in GCS.",
+                len(image_names), len(json_files))
 
-    logger.info("Found %d JSON file(s) in GCS.", len(json_files))
-    return json_files
+    # 2. For each image with a matching JSON, extract the metadata attributes.
+    metadata = {}
+    for image_name in image_names:
+        # Match image to its JSON by filename stem (e.g. "abc.jpg" -> "abc").
+        stem = os.path.splitext(image_name)[0]
+        blob_name = json_files.get(stem)
+        if blob_name is None:
+            logger.debug("No matching JSON for image '%s', skipping.", image_name)
+            continue
 
-def get_image_metadata_from_encord(folder_name: str = STORAGE_FOLDER_NAME) -> list:
-    """Lists all image items in the Encord storage folder and returns them as a dict.
+        label = json.loads(bucket.blob(blob_name).download_as_text())
+        attributes = label.get("attributes", {})
+        new_values = {
+            target: attributes[source]
+            for source, target in _METADATA_FIELD_MAP.items()
+            if source in attributes
+        }
+        if not new_values:
+            logger.warning("JSON '%s' has no target attributes, skipping.", blob_name)
+            continue
 
-    Looks up the storage folder created earlier by name and returns a mapping of
-    ``{item_name: StorageItem}`` for every image in the folder.
-    """
+        metadata[image_name] = new_values
+
+    logger.info("Built metadata for %d image(s).", len(metadata))
+    return metadata
+
+def ensure_metadata_schema() -> None:
+    print("\n[1/4] Creating metadata schema...")
+    schema = user_client.metadata_schema()
+
+    # Register exactly the fields we write (the target names in the field map),
+    # so the schema keys match the stored client_metadata keys.
+    for field_name in _METADATA_FIELD_MAP.values():
+        if not schema.has_key(field_name):
+            schema.add_scalar(field_name, data_type="varchar")
+            print(f"  Added: {field_name} (varchar)")
+        else:
+            print(f"  Already exists: {field_name}")
+    schema.save()
+
+
+def attach_metadata_to_images(metadata: dict, storage_folder_name: str = STORAGE_FOLDER_NAME) -> None:
+    # Look up the folder by name. get_storage_folder() requires a UUID, so we
+    # search instead and match on the exact name (search is a substring filter).
     storage_folder = next(
-        (f for f in user_client.list_storage_folders(search=folder_name)
-         if f.name == folder_name),
+        (f for f in user_client.list_storage_folders(search=storage_folder_name)
+         if f.name == storage_folder_name),
         None,
     )
     if storage_folder is None:
-        raise ValueError(f"Storage folder '{folder_name}' not found.")
-
-    logger.info("Listing image items in storage folder '%s'.", folder_name)
-    images = []
-    for item in storage_folder.list_items(item_types=[StorageItemType.IMAGE]):
-        images.append(item)
-    logger.info("Found %d image(s) in Encord folder '%s'.", len(images), folder_name)
-    return images
+        raise ValueError(f"Storage folder '{storage_folder_name}' not found.")
 
 
+    items_by_name = {}
+    for item in storage_folder.list_items():
+        items_by_name.setdefault(PurePosixPath(item.name).name, []).append(item)
 
-def attach_metadata_to_storage_folder(
-    folder_name: str = STORAGE_FOLDER_NAME,
-    remote_url: str = GCS_REMOTE_URL,
-) -> None:
-    """For each image that has a matching JSON label, attach the label's
-    ``weather``, ``scene`` and ``timeofday`` attributes to the image's
-    metadata in Encord (using the customer's prescribed field names).
-    """
-    json_files = get_all_json_names_from_gcs(remote_url)
-    images = get_image_metadata_from_encord(folder_name)
-
-    bucket_name = remote_url[len("gs://"):].partition("/")[0]
-    bucket = storage.Client().bucket(bucket_name)
-
-    updated = 0
-    skipped = 0
+    attached = 0
     with Bundle() as bundle:
-        for item in images:
-            # Match image to its JSON label by filename stem (e.g. "abc.jpg" -> "abc").
-            stem = os.path.splitext(item.name)[0]
-            blob_name = json_files.get(stem)
-            if blob_name is None:
-                logger.debug("No matching JSON for image '%s', skipping.", item.name)
-                skipped += 1
+        for image_name, meta in metadata.items():
+            items = items_by_name.get(image_name)
+            if not items:
+                logger.warning(
+                    "Image '%s' not found in folder '%s', skipping.",
+                    image_name, storage_folder_name,
+                )
                 continue
+            for item in items:
+                item.update(client_metadata=meta, bundle=bundle)
+                logger.info("Updated metadata for '%s': %s", image_name, meta)
+                attached += 1
 
-            label = json.loads(bucket.blob(blob_name).download_as_text())
-            attributes = label.get("attributes", {})
-            new_values = {
-                target: attributes[source]
-                for source, target in _METADATA_FIELD_MAP.items()
-                if source in attributes
-            }
-            if not new_values:
-                logger.warning("JSON '%s' has no target attributes, skipping.", blob_name)
-                skipped += 1
-                continue
+    logger.info("Attached metadata to %d image item(s).", attached)
 
-            merged = {**(item.client_metadata or {}), **new_values}
-            item.update(client_metadata=merged, bundle=bundle)
-            logger.info("Attaching metadata to '%s': %s", item.name, new_values)
-            updated += 1
-
-    logger.info("Metadata update complete: %d updated, %d skipped.", updated, skipped)
-
-def main():
-    try:
-        attach_metadata_to_storage_folder()
-    except Exception as e:
-        logger.error("An error occurred: %s", e)
-        raise
+def main() -> None:
+    ensure_metadata_schema()
+    metadata = create_image_metadata_dict()
+    attach_metadata_to_images(metadata)
 
 if __name__ == "__main__":
     main()
 
-
- 

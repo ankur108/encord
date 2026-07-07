@@ -1,3 +1,6 @@
 # Encord Python SDK
 encord
 google-cloud-storage
+
+# Testing
+pytest

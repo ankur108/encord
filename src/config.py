@@ -36,3 +36,6 @@ GCS_INTEGRATION_TITLE: str = os.environ.get(
 GCS_REMOTE_URL: str = os.environ.get(
     "ENCORD_GCS_REMOTE_URL", "gs://enc-techint-datasets/ds-challenge-bddfde26"
 )
+
+OUTPUT_FILE = "reports/ontology_objects.json"
+BLOB_LIMIT = 500  # Max number of blobs to download from GCS

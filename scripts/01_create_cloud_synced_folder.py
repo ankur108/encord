@@ -8,7 +8,7 @@ from src.config import (
     STORAGE_FOLDER_METADATA,
     STORAGE_FOLDER_NAME,
 )
-from storage_folder_builder import create_cloud_synced_folder
+from src.storage_folder_builder import create_cloud_synced_folder
 
 logging.basicConfig(
     level=logging.INFO,  # or INFO, WARNING, etc.

@@ -9,6 +9,8 @@ __pycache__/
 # Any private/public key files
 *key*
 
+.claude/
+
 # Distribution / packaging
 .Python
 build/

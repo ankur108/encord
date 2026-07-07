@@ -1,0 +1,35 @@
+name: Run Pipeline
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Write Encord private key
+        run: |
+          printf '%s' "${{ secrets.ENCORD_SSH_PRIVATE_KEY }}" > encord-encord_api_keys-private-key.ed25519
+          chmod 600 encord-encord_api_keys-private-key.ed25519
+
+      - name: Run pipeline
+        env:
+          ENCORD_GCS_INTEGRATION_TITLE: ${{ vars.ENCORD_GCS_INTEGRATION_TITLE }}
+          ENCORD_GCS_REMOTE_URL: ${{ vars.ENCORD_GCS_REMOTE_URL }}
+        run: python main.py

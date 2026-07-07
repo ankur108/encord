@@ -1,16 +1,17 @@
 import json
+import logging
 import sys
 from pathlib import Path
 from google.cloud import storage
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
-from src.config import ONTOLOGY_EXPORT_SOURCE, ONTOLOGY_EXPORT_PATH
+from src.config import ONTOLOGY_EXPORT_SOURCE, ONTOLOGY_EXPORT_PATH,OUTPUT_FILE,BLOB_LIMIT
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 SHAPE_KEYS = {"box2d", "poly2d", "point", "box3d", "poly3d"}
-REPORTS_DIR = Path(__file__).resolve().parents[1] / "reports"
-OUTPUT_FILE = REPORTS_DIR / "ontology_objects.json"
-
 
 def collect(data: dict, ontology: dict):
     '''Collects object categories, shapes, and attributes from the given "
@@ -35,11 +36,11 @@ def load_local(directory: str) -> dict:
     for json_file in sorted(path.glob("*.json")):
         with open(json_file) as fh:
             collect(json.load(fh), ontology)
-        print(f"  Loaded {json_file.name}")
+        logger.info("Loaded %s", json_file.name)
     return ontology
 
 
-def load_gcs(gcs_path: str) -> dict:
+def load_gcs(gcs_path: str, blob_limit : int = BLOB_LIMIT) -> dict:
     '''Loads ontology data from all .json files under a gs://bucket/prefix path,
     recursing through every folder and sub-folder.'''
     
@@ -51,14 +52,24 @@ def load_gcs(gcs_path: str) -> dict:
     bucket = storage.Client.create_anonymous_client().bucket(bucket_name)
 
     ontology = {}
+    blob_limit = 0
     for blob in bucket.list_blobs():
-        if not blob.name.endswith(".json") and not blob.name.contains("test"):
+        if not blob.name.endswith(".json"):
             continue
-        print(f"Downloading {blob.name}")
+
+        if not 'test' in blob.name:
+            continue # Skip non-test files
+        
+        logger.info("Downloading %s", blob.name)
+
+        blob_limit += 1
+        if blob_limit > BLOB_LIMIT:
+            logger.info("Reached blob limit of %d, stopping download.", blob_limit)
+            break
         try:
             collect(json.loads(blob.download_as_text()), ontology)
         except Exception as exc:
-            print(f"  Warning: skipping {blob.name}: {exc}")
+            logger.warning("Skipping %s: %s", blob.name, exc)
     return ontology
 
 
@@ -66,7 +77,7 @@ def main():
     source = ONTOLOGY_EXPORT_SOURCE
     path = ONTOLOGY_EXPORT_PATH
 
-    print(f"\nSource: {source}  Path: {path}\n")
+    logger.info("Source: %s  Path: %s", source, path)
     ontology = load_local(path) if source == "local" else load_gcs(path)
 
     if not ontology:
@@ -81,11 +92,10 @@ def main():
         for category, data in sorted(ontology.items())
     ]
 
-    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     with open(OUTPUT_FILE, "w") as fh:
         json.dump(output, fh, indent=2)
 
-    print(f"\nExported {len(output)} categories → {OUTPUT_FILE}")
+    logger.info("Exported %d categories → %s", len(output), OUTPUT_FILE)
 
 
 if __name__ == "__main__":
