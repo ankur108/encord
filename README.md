@@ -150,7 +150,8 @@ python main.py
 ```
 
 `main.py` runs the stages in order, times each one and the total wall-clock, and
-**stops at the first failure**. **To skip a step** (e.g. the folder already
+**stops at the first failure**. The whole end-to-end pipeline takes **~19 minutes**
+to run. **To skip a step** (e.g. the folder already
 exists), comment out its `run_step(...)` line. Any stage can also be run on its
 own:
 
@@ -210,7 +211,7 @@ is GCS I/O, not the Encord API. The cloud-sync in stage 1 is asynchronous: the
 code starts the job and polls up to a 300s timeout, warning (not failing) if it's
 still running. The clear scaling lever is **parallelizing the downloads** (thread
 pool), which would cut the label steps roughly by the pool size. Report actual
-wall-clock after your run (printed by `main.py`): `<runtime>`.
+wall-clock after your run (printed by `main.py`): **~19 min** end-to-end.
 
 ### Idempotency & re-runnability
 
