@@ -110,6 +110,10 @@ supplied. Shapes seen in the data but not yet supported by the mapping
   ([docs](https://docs.encord.com/platform-documentation/Annotate/annotate-api-keys))
 - Access to the customer's GCS cloud integration in Encord (the public bucket
   itself is read anonymously — see Design characteristics)
+- Update the `PRIVATE_KEY_PATH` config variable (`src/config.py`, or the
+  `ENCORD_PRIVATE_KEY_PATH` env override) with your Encord SSH private key
+  destination, **or** create a private secret in GitHub
+  (`ENCORD_API_KEYS_PRIVATE_KEY`) for CI runs — see Configuration below.
 
 ```bash
 pip install -r requirements.txt
