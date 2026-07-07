@@ -24,10 +24,10 @@ gs://enc-techint-datasets/ds-challenge-bddfde26/
 1. **Code** — the Python pipeline in this repo (`main.py` + `scripts/` + `src/`),
    plus a GitHub Actions workflow that runs it end-to-end (`.github/workflows/run-pipeline.yml`).
 2. **Encord entities** — links to the created Folder and Project:
-   - Index Folder: `<ADD FOLDER URL>`
-   - Project: `<ADD PROJECT URL>`
-   - Dataset: `<ADD DATASET URL>`
-   - Ontology: `<ADD ONTOLOGY URL>`
+   - Index Folder: https://app.encord.com/data/files/8bda055c-1ec6-4635-9b38-90dbb6fbf6f8
+   - Project: https://app.encord.com/projects/view/5e0a1cf7-6d31-491c-8763-d50fdb4d2f42/summary
+   - Dataset: https://app.encord.com/data/datasets/0cffad90-d946-459d-a3ca-cb2ce982747f
+   - Ontology: https://app.encord.com/ontologies/view/46bc93a6-875d-4f64-b02a-01d06b73408a/structure
 
 ## Mapping to the challenge brief
 
