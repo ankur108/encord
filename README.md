@@ -24,10 +24,10 @@ gs://enc-techint-datasets/ds-challenge-bddfde26/
 1. **Code** — the Python pipeline in this repo (`main.py` + `scripts/` + `src/`),
    plus a GitHub Actions workflow that runs it end-to-end (`.github/workflows/run-pipeline.yml`).
 2. **Encord entities** — links to the created Folder and Project:
-   - Index Folder: https://app.encord.com/data/files/8bda055c-1ec6-4635-9b38-90dbb6fbf6f8
-   - Project: https://app.encord.com/projects/view/5e0a1cf7-6d31-491c-8763-d50fdb4d2f42/summary
-   - Dataset: https://app.encord.com/data/datasets/0cffad90-d946-459d-a3ca-cb2ce982747f
-   - Ontology: https://app.encord.com/ontologies/view/46bc93a6-875d-4f64-b02a-01d06b73408a/structure
+   - Index Folder: https://app.encord.com/data/files/3123532e-921f-47a9-a5dd-e934e02b1356
+   - Project: https://app.encord.com/projects/view/ebb6b706-2afe-44c0-b19b-d04fe6eeebf8/summary
+   - Dataset: https://app.encord.com/data/datasets/355527c2-3510-4981-a7ad-32becd023724
+   - Ontology: https://app.encord.com/ontologies/view/101332ac-f5cd-4d9c-b6f8-6e9892719af9/structure
 
 ## Mapping to the challenge brief
 
@@ -154,7 +154,7 @@ python main.py
 ```
 
 `main.py` runs the stages in order, times each one and the total wall-clock, and
-**stops at the first failure**. The whole end-to-end pipeline takes **~5 minutes**
+**stops at the first failure**. The whole end-to-end pipeline takes **~6 minutes**
 to run. **To skip a step** (e.g. the folder already
 exists), comment out its `run_step(...)` line. Any stage can also be run on its
 own:
