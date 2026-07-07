@@ -22,6 +22,14 @@ def get_ontology_hash(ontology_name: str) -> str:
     return results[0]["ontology"].ontology_hash
 
 
+def get_existing_project_hash(project_name: str) -> str | None:
+    """Look up an existing project by title and return its hash, if any."""
+    results = user_client.get_projects(title_eq=project_name)
+    if not results:
+        return None
+    return results[0]["project"].project_hash
+
+
 def create_project(
     project_name: str,
     project_description: str,
@@ -31,8 +39,18 @@ def create_project(
     """Create a project attached to an existing dataset and ontology.
 
     Looks up the dataset and ontology by name, then creates a project that
-    links them together. Returns the hash of the created project.
+    links them together. If a project with the same name already exists, it is
+    reused instead of creating a duplicate. Returns the project hash.
     """
+    existing_project_hash = get_existing_project_hash(project_name)
+    if existing_project_hash is not None:
+        logger.info(
+            "Project '%s' already exists (hash: %s); skipping creation.",
+            project_name,
+            existing_project_hash,
+        )
+        return existing_project_hash
+
     dataset_hash = get_dataset_hash(dataset_name)
     logger.info("Found dataset '%s' (hash: %s).", dataset_name, dataset_hash)
 

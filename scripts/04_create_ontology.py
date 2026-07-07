@@ -3,21 +3,15 @@ import logging
 import sys
 from pathlib import Path
 
-sys.path.append(str(Path(__file__).resolve().parents[1]))
-
 from encord.objects import OntologyStructure, Shape
 
-from src.config import ONTOLOGY_NAME
-from utils.encord_client import user_client
-from ontology_builder import create_ontology_with_objects_and_attributes
+from src.config import ONTOLOGY_NAME, OUTPUT_FILE
+from src.utils.encord_client import user_client
+from src.ontology_builder import create_ontology_with_objects_and_attributes
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-REPORTS_DIR = Path(__file__).resolve().parents[1] / "reports"
-ONTOLOGY_OBJECTS_FILE = REPORTS_DIR / "ontology_objects.json"
-
-# Maps BDD100K shape keys to Encord Shape enum values
 SHAPE_MAP: dict[str, Shape] = {
     "box2d": Shape.BOUNDING_BOX,
     "poly2d": Shape.POLYGON,
@@ -25,9 +19,8 @@ SHAPE_MAP: dict[str, Shape] = {
     "polyline": Shape.POLYLINE,
 }
 
-
 def load_ontology_objects(path: Path) -> list[dict]:
-    if not path.exists():
+    if not path.is_file():
         sys.exit(f"Error: ontology objects file not found: {path}")
     with open(path) as fh:
         return json.load(fh)
@@ -85,8 +78,9 @@ def build_structure(objects: list[dict]) -> OntologyStructure:
 
 
 def main() -> None:
-    objects = load_ontology_objects(ONTOLOGY_OBJECTS_FILE)
-    logger.info("Loaded %d categories from %s", len(objects), ONTOLOGY_OBJECTS_FILE)
+    output_path = Path(OUTPUT_FILE)
+    objects = load_ontology_objects(output_path)
+    logger.info("Loaded %d categories from %s", len(objects), OUTPUT_FILE)
 
     structure = build_structure(objects)
     logger.info(

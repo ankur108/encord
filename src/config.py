@@ -1,8 +1,9 @@
 import os
 
 # --- Auth ---
-PRIVATE_KEY_PATH: str = "./encord-encord_api_keys-private-key.ed25519"
-
+PRIVATE_KEY_PATH: str = os.environ.get(
+    "ENCORD_PRIVATE_KEY_PATH", "./encord-encord_api_keys-private-key.ed25519"
+)
 
 # --- Cloud Storage Folder ---
 STORAGE_FOLDER_NAME: str = "enc-techint-datasets-gc"
