@@ -1,0 +1,2 @@
+- [Ontology upsert API facts](ontology_upsert_api.md) — get_ontologies(title_eq=...) + Ontology.structure has no public setter, mutate .objects/.classifications in place then .save()
+- [Dataset/DataRow API facts](dataset_data_row_api.md) — get_datasets shape, DataRow has .uid not .uuid, link_items takes storage UUIDs, delete_data(data_hashes: str list) is the only removal method

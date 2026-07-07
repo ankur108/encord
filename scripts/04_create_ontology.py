@@ -7,7 +7,7 @@ from encord.objects import OntologyStructure, Shape
 
 from src.config import ONTOLOGY_NAME, OUTPUT_FILE
 from src.utils.encord_client import user_client
-from src.ontology_builder import create_ontology_with_objects_and_attributes
+from src.ontology_builder import create_ontology_structure
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -63,7 +63,7 @@ def build_structure(objects: list[dict]) -> OntologyStructure:
         # causes the builder to create a TextAttribute placeholder.
         attributes: dict[str, list[str]] = {name: [] for name in attr_names}
 
-        create_ontology_with_objects_and_attributes(
+        create_ontology_structure(
             ontology_structure=structure,
             object_name=category,
             shape=encord_shape,
@@ -86,15 +86,42 @@ def main() -> None:
     logger.info(
         "Built ontology structure with %d objects", len(structure.objects)
     )
+    description = "Data Driven Ontology based on JSON Objects & Categories"
 
-    ontology = user_client.create_ontology(
-        title=ONTOLOGY_NAME,
-        description="Auto-generated from BDD100K sample annotations",
-        structure=structure,
-    )
-    logger.info(
-        "Created ontology '%s' (hash: %s)", ONTOLOGY_NAME, ontology.ontology_hash
-    )
+    # Upsert: overwrite the structure of an existing ontology with the same
+    # title, otherwise create a new one. Encord does not enforce title
+    # uniqueness, so guard against multiple matches.
+    existing = user_client.get_ontologies(title_eq=ONTOLOGY_NAME)
+    if len(existing) > 1:
+        logger.warning(
+            "Found %d ontologies titled '%s'; updating the first match.",
+            len(existing),
+            ONTOLOGY_NAME,
+        )
+
+    if existing:
+        ontology = existing[0]["ontology"]
+        # `Ontology.structure` is a getter-only property, so overwrite the
+        # live structure's fields in place rather than reassigning it.
+        ontology.structure.objects = structure.objects
+        ontology.structure.classifications = structure.classifications
+        ontology.structure.skeleton_templates = structure.skeleton_templates
+        ontology.description = description
+        ontology.save()
+        logger.info(
+            "Overwrote structure of existing ontology '%s' (hash: %s)",
+            ONTOLOGY_NAME,
+            ontology.ontology_hash,
+        )
+    else:
+        ontology = user_client.create_ontology(
+            title=ONTOLOGY_NAME,
+            description=description,
+            structure=structure,
+        )
+        logger.info(
+            "Created ontology '%s' (hash: %s)", ONTOLOGY_NAME, ontology.ontology_hash
+        )
 
 
 if __name__ == "__main__":

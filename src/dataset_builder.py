@@ -22,8 +22,26 @@ def get_storage_folder(folder_name: str):
     return folder
 
 
-def create_dataset(dataset_name: str) -> str:
-    """Create an empty CORD-storage dataset and return its hash."""
+def find_dataset(dataset_name: str) -> str | None:
+    """Return the hash of an existing dataset with this exact title, or None."""
+    results = user_client.get_datasets(title_eq=dataset_name)
+    if not results:
+        return None
+    dataset_hash = results[0]["dataset"].dataset_hash
+    logger.info("Found existing dataset '%s' (hash: %s).", dataset_name, dataset_hash)
+    return dataset_hash
+
+
+def get_or_create_dataset(dataset_name: str) -> str:
+    """Return the hash of the dataset named ``dataset_name``.
+
+    If a dataset with that exact title already exists it is reused; otherwise a
+    new empty CORD-storage dataset is created.
+    """
+    existing = find_dataset(dataset_name)
+    if existing is not None:
+        return existing
+
     logger.info("Creating dataset '%s'.", dataset_name)
     create_response = user_client.create_dataset(
         dataset_title=dataset_name,
@@ -35,33 +53,47 @@ def create_dataset(dataset_name: str) -> str:
     return dataset_hash
 
 
-def link_items_to_dataset(dataset_hash: str, item_uuids: Sequence[UUID]) -> None:
-    """Link the given storage items into an existing dataset.
+def sync_items_to_dataset(dataset_hash: str, item_uuids: Sequence[UUID]) -> None:
+    """Make the dataset's linked items match ``item_uuids`` exactly.
 
-    Items already present in the dataset are skipped so they are not linked
-    twice; only new items are linked.
+    New items (not yet linked) are linked in; data rows whose backing storage
+    item is no longer in ``item_uuids`` are removed. Items already linked and
+    still wanted are left untouched.
     """
     dataset = user_client.get_dataset(dataset_hash)
 
-    already_linked = {
-        row.backing_item_uuid
+    desired = set(item_uuids)
+
+    # Map currently-linked storage item UUID -> data_hash (DataRow.uid), so we
+    # can both detect what's already linked and remove what's no longer wanted.
+    linked_rows = {
+        row.backing_item_uuid: row.uid
         for row in dataset.list_data_rows()
         if row.backing_item_uuid is not None
     }
+    already_linked = set(linked_rows)
 
-    new_items = [uuid for uuid in item_uuids if uuid not in already_linked]
-    skipped = len(item_uuids) - len(new_items)
-    if skipped:
+    new_items = [uuid for uuid in desired if uuid not in already_linked]
+    stale_hashes = [
+        data_hash
+        for item_uuid, data_hash in linked_rows.items()
+        if item_uuid not in desired
+    ]
+
+    if stale_hashes:
         logger.info(
-            "Skipping %d item(s) already linked to dataset '%s'.",
-            skipped,
+            "Removing %d stale data row(s) from dataset '%s'.",
+            len(stale_hashes),
             dataset_hash,
         )
+        dataset.delete_data(stale_hashes)
 
-    if not new_items:
-        logger.info("No new items to link into dataset '%s'.", dataset_hash)
-        return
+    if new_items:
+        logger.info("Linking %d new item(s) into the dataset.", len(new_items))
+        dataset.link_items(new_items)
+        logger.info(
+            "Linked %d item(s) into dataset '%s'.", len(new_items), dataset_hash
+        )
 
-    logger.info("Linking %d new item(s) into the dataset.", len(new_items))
-    dataset.link_items(new_items)
-    logger.info("Linked %d item(s) into dataset '%s'.", len(new_items), dataset_hash)
+    if not new_items and not stale_hashes:
+        logger.info("Dataset '%s' already up to date; nothing to change.", dataset_hash)

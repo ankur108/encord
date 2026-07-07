@@ -48,7 +48,7 @@ def _add_attributes(obj, attributes: dict[str, list[str]]) -> None:
             logger.debug("Attribute '%s' already exists on '%s'; topped up options only.", attr_name, obj.name)
 
 
-def create_ontology_with_objects_and_attributes(
+def create_ontology_structure(
     ontology_structure: OntologyStructure,
     object_name: str,
     shape: Shape,

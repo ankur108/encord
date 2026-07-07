@@ -8,22 +8,26 @@ from src.config import (
     STORAGE_FOLDER_NAME,
 )
 from src.dataset_builder import (
-    create_dataset,
+    get_or_create_dataset,
     get_storage_folder,
-    link_items_to_dataset,
+    sync_items_to_dataset,
 )
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def create_dataset_from_storage_folder(
+def sync_dataset_from_storage_folder(
     dataset_name: str = DATASET_NAME,
     folder_name: str = STORAGE_FOLDER_NAME,
 ) -> str:
-    """Create a dataset and link all image items that have metadata into it.
+    """Ensure a dataset exists and its linked items match the storage folder.
 
-    Returns the hash of the created dataset.
+    Creates the dataset only if one with this name is missing; otherwise reuses
+    it and syncs the links (adding new image items with metadata and removing
+    ones that are no longer present).
+
+    Returns the hash of the dataset.
     """
     folder = get_storage_folder(folder_name)
 
@@ -45,17 +49,17 @@ def create_dataset_from_storage_folder(
             f"No image items with metadata found in storage folder '{folder_name}'."
         )
 
-    dataset_hash = create_dataset(dataset_name)
-    link_items_to_dataset(dataset_hash, item_uuids)
+    dataset_hash = get_or_create_dataset(dataset_name)
+    sync_items_to_dataset(dataset_hash, item_uuids)
 
     return dataset_hash
 
 
 def main() -> None:
     try:
-        create_dataset_from_storage_folder()
+        sync_dataset_from_storage_folder()
     except Exception as e:
-        logger.error("Failed to create dataset: %s", e)
+        logger.error("Failed to sync dataset: %s", e)
         sys.exit(1)
 
 
