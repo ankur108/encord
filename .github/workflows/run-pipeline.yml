@@ -22,15 +22,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Write Encord private key
-        env:
-          ENCORD_PRIVATE_KEY: ${{ secrets.ENCORD_PRIVATE_KEY }}
-        run: |
-          printf '%s' "$ENCORD_PRIVATE_KEY" > "$RUNNER_TEMP/encord_private_key.ed25519"
-          echo "ENCORD_PRIVATE_KEY_PATH=$RUNNER_TEMP/encord_private_key.ed25519" >> "$GITHUB_ENV"
-
       - name: Run pipeline
         env:
-          ENCORD_GCS_INTEGRATION_TITLE: ${{ vars.ENCORD_GCS_INTEGRATION_TITLE }}
-          ENCORD_GCS_REMOTE_URL: ${{ vars.ENCORD_GCS_REMOTE_URL }}
+          ENCORD_PRIVATE_KEY_PATH: ${{ secrets.ENCORD_API_KEYS_PRIVATE_KEY }}
+          # ENCORD_GCS_INTEGRATION_TITLE: ${{ vars.ENCORD_GCS_INTEGRATION_TITLE }}
+          # ENCORD_GCS_REMOTE_URL: ${{ vars.ENCORD_GCS_REMOTE_URL }}
         run: python main.py
