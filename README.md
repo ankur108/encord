@@ -154,7 +154,7 @@ python main.py
 ```
 
 `main.py` runs the stages in order, times each one and the total wall-clock, and
-**stops at the first failure**. The whole end-to-end pipeline takes **~19 minutes**
+**stops at the first failure**. The whole end-to-end pipeline takes **~5 minutes**
 to run. **To skip a step** (e.g. the folder already
 exists), comment out its `run_step(...)` line. Any stage can also be run on its
 own:
