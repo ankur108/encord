@@ -1,8 +1,9 @@
-# Encord FDE Challenge — Ankur Chaudhary
+# Encord FDE Challenge - Ankur Chaudhary
 
-Migrating an autonomous-driving customer's images, scene-level metadata,
-and annotations into the Encord platform so they can **view, search, and continue
-annotating** the data.
+Migrating an autonomous-driving customer's images, scene-level metadata, and
+annotations into the Encord platform so they can **view, search, and continue
+annotating** the data — done **programmatically** via the Encord Python SDK so
+the customer can fold it into their own ingestion pipelines.
 
 The data lives in a public GCS bucket, organized by split:
 
@@ -20,12 +21,30 @@ gs://enc-techint-datasets/ds-challenge-bddfde26/
 
 ## Deliverables
 
-1. **Code** — the Python pipeline in this repo (`main.py` + `scripts/` + `src/`).
+1. **Code** — the Python pipeline in this repo (`main.py` + `scripts/` + `src/`),
+   plus a GitHub Actions workflow that runs it end-to-end (`.github/workflows/run-pipeline.yml`).
 2. **Encord entities** — links to the created Folder and Project:
    - Index Folder: `<ADD FOLDER URL>`
    - Project: `<ADD PROJECT URL>`
    - Dataset: `<ADD DATASET URL>`
    - Ontology: `<ADD ONTOLOGY URL>`
+
+## Mapping to the challenge brief
+
+The task asks us to get images, metadata, and labels into Encord so the customer
+can review and plan enrichment, with **all images in the Data section but only
+labelled images added to the project**, and to surface engineering
+characteristics in the report. Here's how this repo addresses each requirement.
+
+| Brief requirement | Where it's handled |
+| --- | --- |
+| Folder in Index for all images | Stage 1 — cloud-synced folder over `10k/` |
+| Ontology reflecting annotation categories | Stages 3–4 — ontology **derived from the data** |
+| Dataset linking data units to the project | Stage 5 — only images that have metadata are linked |
+| Project for the annotation workflow | Stage 6 — dataset + ontology |
+| Searchable scene metadata (`weather`/`scene`/`time_of_day`) | Stage 2 — registers a metadata schema and attaches `client_metadata` |
+| Programmatic & handable to the customer | All stages are SDK-driven; config is externalized |
+| Handle unclean production data | Skip logic at every stage (see Coverage) |
 
 ## Approach
 
@@ -34,55 +53,93 @@ an Encord entity the customer needs:
 
 | Stage | Script | Encord entity | What it does |
 | --- | --- | --- | --- |
-| 1 | `01_create_cloud_synced_folders.py` | Folder (Index) | Create a cloud-synced Index folder over the GCS bucket so **all** images appear in the Data section |
-| 2 | `02_attach_metadata.py` | — | Read the label JSONs and attach `weather` / `scene` / `time_of_day` as searchable metadata on each image |
+| 1 | `01_create_cloud_synced_folder.py` | Folder (Index) | Get-or-create a cloud-synced Index folder over the `10k/` GCS prefix so **all** images appear in the Data section, then trigger + wait on a sync job |
+| 2 | `02_attach_metadata.py` | — | Register the metadata schema, read the label JSONs, and attach `weather` / `scene` / `time_of_day` as searchable `client_metadata` on each image (batched via a `Bundle`) |
 | 3 | `03_export_ontology_objects.py` | — | Scan the label JSONs to discover object categories, shapes, and attributes → `reports/ontology_objects.json` |
-| 4 | `04_create_ontology.py` | Ontology | Build the ontology from the discovered categories |
-| 5 | `05_create_dataset.py` | Dataset | Create a dataset from the folder's images (the units linked into a project) |
-| 6 | `06_create_project.py` | Project | Create the annotation project tying the dataset + ontology together |
+| 4 | `04_create_ontology.py` | Ontology | Build the ontology in Encord from the discovered categories/shapes/attributes |
+| 5 | `05_create_dataset.py` | Dataset | Create a dataset and link **only** the folder images that carry metadata (labelled images) |
+| 6 | `06_create_project.py` | Project | Get-or-create the annotation project tying the dataset + ontology together |
 
 ### Metadata schema (prescribed — do not modify)
 
-Attached to each image as `client_metadata` using the exact field names required
-by the customer:
+Attached to each image as `client_metadata`, and pre-registered as a metadata
+schema (stage 2, `ensure_metadata_schema`) so the fields are searchable/filterable
+in the Encord UI:
 
-| Field | Source (BDD JSON) | Example |
-| --- | --- | --- |
-| `weather` | `attributes.weather` | `clear`, `rainy`, `overcast` |
-| `scene` | `attributes.scene` | `highway`, `city street`, `residential` |
-| `time_of_day` | `attributes.timeofday` | `daytime`, `night`, `dawn/dusk` |
+| Field | Source (BDD JSON) | Type | Example |
+| --- | --- | --- | --- |
+| `weather` | `attributes.weather` | varchar | `clear`, `rainy`, `overcast` |
+| `scene` | `attributes.scene` | varchar | `highway`, `city street`, `residential` |
+| `time_of_day` | `attributes.timeofday` | varchar | `daytime`, `night`, `dawn/dusk` |
 
-The BDD export uses the key `timeofday`; stage 2 maps it to the required
-`time_of_day` field name (see `_METADATA_FIELD_MAP` in `02_attach_metadata.py`).
+The BDD export uses the key `timeofday`; stage 2 is meant to map it to the
+required `time_of_day` field name via `_METADATA_FIELD_MAP` in
+`02_attach_metadata.py`.
+
+> ⚠️ **Highlighted note — field naming.** The BDD source key is `timeofday`
+> (no underscore) while the prescribed schema field is `time_of_day` (with
+> underscore). This underscore mismatch between the export and the required
+> schema is called out here in the report so the reviewer is aware of the naming
+> discrepancy and how the field map bridges the two. The single-dict
+> `_METADATA_FIELD_MAP` is where this mapping is controlled.
+
+### Ontology (derived from the data)
+
+The ontology is not hand-written — stage 3 scans the annotation JSONs and stage 4
+turns the result into an `OntologyStructure`. From the sampled `test` split, the
+discovered structure (`reports/ontology_objects.json`) is:
+
+- **Bounding-box (`box2d`) objects**: `car`, `bus`, `truck`, `train`, `motor`,
+  `bike`, `rider`, `person`, `traffic light`, `traffic sign` — each with the
+  attributes `occluded`, `truncated`, `trafficLightColor`.
+- **Polygon (`poly2d`) objects**: lane markings (`lane/crosswalk`,
+  `lane/single|double white/yellow`, `lane/road curb`, `lane/single other`) with
+  `direction` / `style` attributes, and drivable areas (`area/drivable`,
+  `area/alternative`).
+
+Because attribute *values* aren't known at discovery time, they're created as
+free-text (`TextAttribute`) placeholders; the builder promotes boolean-only
+attributes to a checklist and multi-value attributes to a radio when values are
+supplied. Shapes seen in the data but not yet supported by the mapping
+(`box3d`, `poly3d`, `point` where unmapped) are skipped with a warning.
 
 ## Setup
 
 - Python 3.10+
 - An Encord account with an SSH key registered
   ([docs](https://docs.encord.com/platform-documentation/Annotate/annotate-api-keys))
-- Access to the customer's GCS cloud integration in Encord
+- Access to the customer's GCS cloud integration in Encord (the public bucket
+  itself is read anonymously — see Design characteristics)
 
 ```bash
 pip install -r requirements.txt
 ```
 
+`requirements.txt`: `encord`, `google-cloud-storage`, `pytest`.
+
 ## Configuration
 
-Everything the customer would change lives in `src/config.py`; the GCS values
-can also be overridden via environment variables so the code runs on any machine
-without edits.
+Everything the customer would change lives in `src/config.py`, and the
+credential + GCS values can be overridden via environment variables so the code
+runs on any machine (and in CI) without edits.
 
 | Setting | Env override | Description |
 | --- | --- | --- |
-| `PRIVATE_KEY_PATH` | — | Path to your Encord SSH private key |
+| `PRIVATE_KEY_PATH` | `ENCORD_PRIVATE_KEY_PATH` | Path to your Encord SSH private key **or** the key contents (see below) |
 | `STORAGE_FOLDER_NAME` / `_DESCRIPTION` / `_METADATA` | — | The Index folder to create |
 | `ONTOLOGY_NAME` | — | Ontology title |
 | `DATASET_NAME` / `DATASET_DESCRIPTION` | — | Dataset title/description |
 | `PROJECT_NAME` / `PROJECT_DESCRIPTION` | — | Project title/description |
 | `ONTOLOGY_EXPORT_SOURCE` | — | `"local"` or `"gcs"` — where to read label JSONs |
 | `ONTOLOGY_EXPORT_PATH` | — | Local dir (e.g. `./sample`) or a `gs://` path |
-| `GCS_INTEGRATION_TITLE` | `ENCORD_GCS_INTEGRATION_TITLE` | GCS integration title in Encord |
+| `GCS_INTEGRATION_TITLE` | `ENCORD_GCS_INTEGRATION_TITLE` | GCS integration title in Encord (Settings → Integrations) |
 | `GCS_REMOTE_URL` | `ENCORD_GCS_REMOTE_URL` | `gs://` bucket/prefix to sync from |
+| `BLOB_LIMIT` | — | Cap on JSONs downloaded during ontology discovery (default `500`) |
+
+**Credential handling.** `src/utils/encord_client.py` detects whether
+`PRIVATE_KEY_PATH` points at a file on disk (local dev) or *is* the key contents
+(CI, where the key is injected as a secret) and calls the right
+`create_with_ssh_private_key` variant. No key material is committed.
 
 ## Running
 
@@ -92,28 +149,49 @@ Run the whole pipeline:
 python main.py
 ```
 
-`main.py` lists the stages explicitly and stops at the first failure. **To skip a
-step** (e.g. the folder already exists), comment out its `run_step(...)` line.
-Any stage can also be run on its own:
+`main.py` runs the stages in order, times each one and the total wall-clock, and
+**stops at the first failure**. **To skip a step** (e.g. the folder already
+exists), comment out its `run_step(...)` line. Any stage can also be run on its
+own:
 
 ```bash
 python scripts/05_create_dataset.py
 ```
+
+### CI / hand-off
+
+`.github/workflows/run-pipeline.yml` runs the full pipeline on push to `main`:
+it checks out the repo, sets up Python 3.11, installs `requirements.txt`, and runs
+`python main.py` with the Encord private key supplied via the
+`ENCORD_API_KEYS_PRIVATE_KEY` secret (GCS integration/URL overrides are available
+as commented-out `vars`). This is the "hand it to the customer and they change
+only config" test in practice — they set their own secret and repo variables.
 
 ## Report
 
 ### Coverage
 
 - **Images** — all images under `10k/` are made available in the Data section via
-  the cloud-synced folder (7,000 train + 1,000 val + 2,000 test = **10,000**).
-- **Labels/metadata** — the `100k/` tree holds ~100,000 JSON files, ~10× the
-  number of images. Stage 2 matches each image to its label **by filename stem**;
-  only images with a matching JSON get metadata, and (via stage 5) only images
-  with metadata are linked into the dataset/project. Labels that reference images
-  not present in `10k/` are deliberately skipped — they can't be annotated
-  without the image.
+  the cloud-synced folder (7,000 train + 1,000 val + 2,000 test = **10,000**),
+  satisfying the brief's "all images in the Data section" requirement.
+- **Metadata** — stage 2 scans the bucket once, separates images from JSONs, and
+  matches each image to its label **by filename stem**. Only images with a
+  matching JSON *and* at least one of the target attributes get metadata; JSONs
+  with no target attributes, and images whose JSON is missing, are logged and
+  skipped.
+- **Labelled-only into the project** — stage 5 links **only** folder images that
+  carry `client_metadata` into the dataset (which the project is built on), so
+  unlabelled images stay in Data but out of the annotation workflow — exactly as
+  the brief requires. It also skips items already linked, so re-linking is safe.
+- **Deliberate skips** — labels that reference images not present in `10k/` can't
+  be annotated without the image and are skipped by design; unrecognised ontology
+  shapes are skipped with a warning.
 - Fill in measured counts after a run: `<N images with metadata>`,
-  `<N skipped, reason>`.
+  `<N skipped, reason>`, `<N objects in ontology>`.
+
+> **Not yet imported: bounding-box/polygon labels as Encord label rows.** Stage 2
+> imports the scene-level *metadata*; the geometry objects are used to *derive the
+> ontology* but are not written into `LabelRowV2` rows. See limitations.
 
 ### Runtime / scaling
 
@@ -122,61 +200,134 @@ round-trip per file). At ~50–100 ms/file:
 
 - A full scan of all ~100k JSONs ≈ **1.5–3 hours** single-threaded.
 - The `10k/` image set only needs its ~10k matching labels ≈ **10–15 min**.
+- Ontology discovery (stage 3) is deliberately capped at `BLOB_LIMIT` (500) JSONs
+  and currently restricted to the `test` split, so it completes in well under a
+  minute — enough to derive a representative ontology without scanning 100k files.
 
 Encord write calls are already batched — stage 2 uses a `Bundle` (up to 1,000
 updates per call) and stage 5 uses a single `link_items` call — so the bottleneck
-is GCS I/O, not the Encord API. The clear scaling lever is **parallelizing the
-downloads** (thread pool), which would cut the label steps roughly by the pool
-size. Report actual wall-clock after your run: `<runtime>`.
+is GCS I/O, not the Encord API. The cloud-sync in stage 1 is asynchronous: the
+code starts the job and polls up to a 300s timeout, warning (not failing) if it's
+still running. The clear scaling lever is **parallelizing the downloads** (thread
+pool), which would cut the label steps roughly by the pool size. Report actual
+wall-clock after your run (printed by `main.py`): `<runtime>`.
+
+### Idempotency & re-runnability
+
+The brief asks that a re-run not create duplicates or fail, and that we state what
+a re-run creates/skips/updates. Current status per stage:
+
+| Stage | Re-run behaviour |
+| --- | --- |
+| 1 Folder | **Get-or-create** — matches by exact name and returns the existing folder |
+| 2 Metadata | **Idempotent update** — re-attaches the same `client_metadata` (overwrite, no duplication); schema registration skips keys that already exist |
+| 3 Ontology export | **Overwrites** `reports/ontology_objects.json` deterministically |
+| 4 Ontology create | ⚠️ **Not yet get-or-create** — `create_ontology` is called unconditionally, so a re-run creates a duplicate ontology. The in-memory builder (`ontology_builder.py`) *is* idempotent (reuses objects, tops up options), but the create call isn't guarded. |
+| 5 Dataset | Dataset **create is not** get-or-create, **but** `link_items_to_dataset` skips items already linked, so linking is idempotent |
+| 6 Project | **Get-or-create** — reuses an existing project with the same title |
 
 ### Configuration knobs
 
-All of `src/config.py` (see table above), plus per-stage skipping via `main.py`.
-Not yet exposed: `--sample N`, `--split`, and `--dry-run` flags (see limitations).
+All of `src/config.py` (see table above) plus the env overrides, per-stage
+skipping via `main.py`, and `BLOB_LIMIT` / `ONTOLOGY_EXPORT_SOURCE` /
+`ONTOLOGY_EXPORT_PATH` for scoping ontology discovery. Not yet exposed as
+first-class flags: `--sample N`, `--split`, and `--dry-run` (see limitations).
 
 ## Design characteristics
 
-- **Portable** — no personal absolute paths; GCS config comes from env vars, and
-  the public bucket is read with an anonymous client (stage 3) so no credentials
-  are needed for discovery.
+- **Portable** — no personal absolute paths; credentials and GCS config come from
+  env vars, and the public bucket is read with an anonymous client (stages 2–3)
+  so no credentials are needed for discovery. Runs unchanged in GitHub Actions.
 - **Modular** — each stage is a standalone script with a `main()`; shared logic
-  lives in `src/` (`storage_folders`, `ontology_builder`, `utils/encord_client`).
+  lives in `src/` (`storage_folder_builder`, `ontology_builder`,
+  `dataset_builder`, `project_builder`, `utils/encord_client`). Scripts are thin
+  orchestration; builders hold the reusable SDK logic.
 - **Extensible** — the ontology is *derived from the data* (stage 3), so new
   categories/attributes are picked up automatically; the metadata field mapping
-  is a single dict.
+  is a single dict; the shape mapping is a single dict.
+- **Resilient to unclean data** — per-file `try/except` during discovery, skip +
+  warn for missing JSONs, missing attributes, unmatched images, and unrecognised
+  shapes, rather than aborting the run.
+
+## Assumptions & trade-offs
+
+These are the deliberate decisions behind the pipeline, and the reasoning for each:
+
+- **Ontology discovery on a 500-JSON sample gives the full picture.** Stage 3
+  scans only ~500 label JSONs from the `test` split, and that already surfaces all
+  **19 object categories**. Scanning the full 70k `train` files yields the same 19
+  categories — so the sample is representative and the full scan buys nothing for
+  ontology derivation. I keep the sample to stay fast; widen it only if a future
+  split is expected to introduce new categories.
+- **Metadata is scanned JSON-first, only where a matching JPEG exists.** Stage 2
+  walks the label JSONs and processes only those with a matching image (by filename
+  stem), so it avoids a full scan of both the JSON *and* JPEG sets. The scan reads
+  from the **public GCS bucket, not from Encord** — this deliberately keeps read
+  load off the Encord platform rather than listing/querying it for every item.
+- **Cloud-synced folder instead of a storage (upload) folder.** I use a
+  cloud-synced Index folder over the GCS prefix rather than uploading files into an
+  Encord storage folder. This avoids re-uploading the customer's data and lets the
+  Encord platform sync any new/upcoming files in the bucket automatically.
+- **Ontology export is a one-off, not run every time.** If a full-JSON scan were
+  ever required, stage 3 (`03_export_ontology_objects.py`) is meant to be run
+  **once, or on demand when the category set might change** — not on every pipeline
+  run. The derived `reports/ontology_objects.json` is the durable artifact the
+  later stages consume.
+- **Metadata is overwritten wholesale, not diffed.** Stage 2 re-writes all
+  `client_metadata` on every run rather than reading existing metadata, comparing
+  it, and writing only the delta. Reading + comparing per item is more expensive
+  (extra round-trips) than simply overwriting, so overwrite-always is the cheaper
+  and simpler idempotent path here.
+- **Metadata/labels not yet visible in the platform UI — unresolved.** I followed
+  the Encord documentation for setting `client_metadata` and registering the
+  metadata schema, but as of now I haven't been able to locate the metadata/labels
+  in the platform UI. This may be a matter of where to look in the UI rather than a
+  write failure; it's flagged here as an open item to confirm.
 
 ## Known limitations & trade-offs
 
 Given the 3-hour scope, these are deliberate:
 
+- **Field naming** — the `timeofday` (source) vs `time_of_day` (prescribed)
+  underscore discrepancy is highlighted above; the field map is the single point
+  of control.
 - **Annotations are not yet imported as Encord labels.** Stage 2 imports the
-  scene-level *metadata* from the JSONs; the bounding-box objects are used to
-  *derive the ontology* but are not written into label rows. Importing them
-  (`LabelRowV2`) is the natural next step.
-- **Partial idempotency.** Stage 1 (folder) is get-or-create. Ontology, dataset,
-  and project creation are **not** yet get-or-create — a re-run would create
-  duplicates. Skipping is currently manual via `main.py`.
-- **Scope flags** (`--sample`, `--split`, `--dry-run`) are described above but
-  not implemented.
+  scene-level *metadata*; the bounding-box/polygon objects derive the ontology but
+  are not written into `LabelRowV2` rows. Importing them is the natural next step.
+- **Partial idempotency.** Folder and project are get-or-create; dataset linking
+  is idempotent; **ontology and dataset creation are not yet get-or-create** and a
+  re-run would create duplicates (skip manually via `main.py` for now).
+- **Ontology discovery is sampled** — capped at `BLOB_LIMIT` and restricted to the
+  `test` split. Good enough for a representative BDD ontology; widen for full
+  coverage.
+- **Scope flags** (`--sample`, `--split`, `--dry-run`) are described but not
+  implemented.
 - **Sequential downloads** are the main performance limit (see Runtime).
+- **`tests/` is empty** — `pytest` is wired into requirements but no tests are
+  written yet.
 
 ## Project layout
 
 ```
-main.py                              # runs pipeline stages in order (skip via comments)
+main.py                              # runs pipeline stages in order, times them (skip via comments)
+.github/workflows/run-pipeline.yml   # CI: install deps + run pipeline on push to main
+requirements.txt                     # encord, google-cloud-storage, pytest
 scripts/
-  01_create_cloud_synced_folders.py  # Index folder over the GCS bucket
-  02_attach_metadata.py              # attach weather/scene/time_of_day to images
+  01_create_cloud_synced_folder.py   # Index folder over the GCS 10k/ prefix (get-or-create + sync)
+  02_attach_metadata.py              # register schema + attach weather/scene/time_of_day to images
   03_export_ontology_objects.py      # discover ontology objects from label JSONs
   04_create_ontology.py              # create the ontology in Encord
-  05_create_dataset.py               # dataset from folder images (labeled only)
+  05_create_dataset.py               # dataset from folder images that have metadata (labelled only)
   06_create_project.py               # project with dataset + ontology
 src/
-  config.py                          # all configuration
-  storage_folders.py                 # folder create/sync helpers (get-or-create)
-  ontology_builder.py                # builds OntologyStructure from discovered objects
-  utils/encord_client.py             # authenticated EncordUserClient
+  config.py                          # all configuration + env overrides
+  storage_folder_builder.py          # cloud-synced folder create/sync helpers (get-or-create)
+  ontology_builder.py                # builds OntologyStructure from discovered objects (idempotent)
+  dataset_builder.py                 # create dataset + link items (skips already-linked)
+  project_builder.py                 # get-or-create project from dataset + ontology by name
+  utils/encord_client.py             # authenticated EncordUserClient (key path or contents)
 reports/
   ontology_objects.json              # output of stage 3, input to stage 4
 sample/                              # a few label JSONs for local testing
+tests/                               # (empty — reserved for pytest)
 ```
