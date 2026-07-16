@@ -303,7 +303,7 @@ are constraints of the 3-hour scope. Both are captured here.
   metadata-attachment and ontology-export steps so previously processed data does
   not have to be read again from the cache.
 
-- **No observability for failures.** It doesn't capture error logs for failed
+- **No observability for failures & data quality.** It doesn't capture error logs for failed
   metadata updates or incorrect annotations, so there is no visibility into what
   went wrong during a run.
 
