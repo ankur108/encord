@@ -22,7 +22,7 @@ gs://enc-techint-datasets/ds-challenge-bddfde26/
 ## Deliverables
 
 1. **Code** — the Python pipeline in this repo (`main.py` + `scripts/` + `src/`),
-   plus a GitHub Actions workflow that runs it end-to-end (`.github/workflows/run-pipeline.yml`).
+   plus a GitHub Actions workflow that  runs it end-to-end (`.github/workflows/run-pipeline.yml`).
 2. **Encord entities** — links to the created Folder and Project:
    - Index Folder: https://app.encord.com/data/files/3123532e-921f-47a9-a5dd-e934e02b1356
    - Project: https://app.encord.com/projects/view/ebb6b706-2afe-44c0-b19b-d04fe6eeebf8/summary
@@ -254,16 +254,24 @@ first-class flags: `--sample N`, `--split`, and `--dry-run` (see limitations).
   warn for missing JSONs, missing attributes, unmatched images, and unrecognised
   shapes, rather than aborting the run.
 
-## Assumptions & trade-offs
+## Limitations
 
-These are the deliberate decisions behind the pipeline, and the reasoning for each:
+Some of these are deliberate design trade-offs (with the reasoning below); others
+are constraints of the 3-hour scope. Both are captured here.
+
+**Deliberate trade-offs**
 
 - **Ontology discovery on a 500-JSON sample gives the full picture.** Stage 3
-  scans only ~500 label JSONs from the `test` split, and that already surfaces all
-  **19 object categories**. Scanning the full 70k `train` files yields the same 19
-  categories — so the sample is representative and the full scan buys nothing for
-  ontology derivation. I keep the sample to stay fast; widen it only if a future
-  split is expected to introduce new categories.
+  scans only ~500 label JSONs from the `test` split (capped at `BLOB_LIMIT`), and
+  that already surfaces all **19 object categories**. Scanning the full 70k `train`
+  files yields the same 19 categories — so the sample is representative and the
+  full scan buys nothing for ontology derivation. I keep the sample to stay fast;
+  widen it only if a future split is expected to introduce new categories.
+- **Ontology export is a one-off, not run every time.** If a full-JSON scan were
+  ever required, stage 3 (`03_export_ontology_objects.py`) is meant to be run
+  **once, or on demand when the category set might change** — not on every pipeline
+  run. The derived `reports/ontology_objects.json` is the durable artifact the
+  later stages consume.
 - **Metadata is scanned JSON-first, only where a matching JPEG exists.** Stage 2
   walks the label JSONs and processes only those with a matching image (by filename
   stem), so it avoids a full scan of both the JSON *and* JPEG sets. The scan reads
@@ -273,43 +281,40 @@ These are the deliberate decisions behind the pipeline, and the reasoning for ea
   cloud-synced Index folder over the GCS prefix rather than uploading files into an
   Encord storage folder. This avoids re-uploading the customer's data and lets the
   Encord platform sync any new/upcoming files in the bucket automatically.
-- **Ontology export is a one-off, not run every time.** If a full-JSON scan were
-  ever required, stage 3 (`03_export_ontology_objects.py`) is meant to be run
-  **once, or on demand when the category set might change** — not on every pipeline
-  run. The derived `reports/ontology_objects.json` is the durable artifact the
-  later stages consume.
 - **Metadata is overwritten wholesale, not diffed.** Stage 2 re-writes all
   `client_metadata` on every run rather than reading existing metadata, comparing
   it, and writing only the delta. Reading + comparing per item is more expensive
   (extra round-trips) than simply overwriting, so overwrite-always is the cheaper
   and simpler idempotent path here.
-- **Metadata/labels not yet visible in the platform UI — unresolved.** I followed
-  the Encord documentation for setting `client_metadata` and registering the
-  metadata schema, but as of now I haven't been able to locate the metadata/labels
-  in the platform UI. This may be a matter of where to look in the UI rather than a
-  write failure; it's flagged here as an open item to confirm.
 
-## Known limitations & trade-offs
+**Design limitations**
 
-Given the 3-hour scope, these are deliberate:
+- **Metadata attachment may not scale by 1–2 orders of magnitude.** The current
+  approach would need generators and a concurrency implementation to handle
+  significantly larger datasets.
 
-- **Field naming** — the `timeofday` (source) vs `time_of_day` (prescribed)
-  underscore discrepancy is highlighted above; the field map is the single point
-  of control.
-- **Annotations are not yet imported as Encord labels.** Stage 2 imports the
-  scene-level *metadata*; the bounding-box/polygon objects derive the ontology but
-  are not written into `LabelRowV2` rows. Importing them is the natural next step.
-- **Partial idempotency.** Folder and project are get-or-create; dataset linking
-  is idempotent; **ontology and dataset creation are not yet get-or-create** and a
-  re-run would create duplicates (skip manually via `main.py` for now).
-- **Ontology discovery is sampled** — capped at `BLOB_LIMIT` and restricted to the
-  `test` split. Good enough for a representative BDD ontology; widen for full
-  coverage.
-- **Scope flags** (`--sample`, `--split`, `--dry-run`) are described but not
-  implemented.
-- **Sequential downloads** are the main performance limit (see Runtime).
-- **`tests/` is empty** — `pytest` is wired into requirements but no tests are
-  written yet.
+- **Ontology object export is limited to a subset of the JSONs.** It currently
+  exports only a limited set of JSONs to extract ontology objects. If there were a
+  need to scan all of them, I would merge the metadata-attachment and
+  ontology-export steps into one so the JSONs are read only once — attaching
+  metadata and extracting objects in the same pass.
+
+- **No checkpointing.** Checkpoints should be implemented in the
+  metadata-attachment and ontology-export steps so previously processed data does
+  not have to be read again from the cache.
+
+- **No observability for failures.** It doesn't capture error logs for failed
+  metadata updates or incorrect annotations, so there is no visibility into what
+  went wrong during a run.
+
+- **Dependency versions are not pinned.** The Encord SDK and related libraries
+  should be pinned to exact versions so pipeline runs stay reproducible and are
+  not broken by upstream releases.
+
+- **No backfill or retry mechanism.** There is no way to reprocess historical
+  data or automatically retry transient failures, so a failed run must be
+  restarted manually from the beginning.
+
 
 ## Project layout
 
